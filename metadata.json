@@ -1,0 +1,5 @@
+{
+  "name": "EmulaGBA",
+  "description": "Conecte seu Dropbox para jogar suas ROMs de Game Boy Advance e sincronizar seus saves entre dispositivos.",
+  "requestFramePermissions": []
+}
