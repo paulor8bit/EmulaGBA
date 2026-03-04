@@ -173,6 +173,22 @@ const getCode = (key: string) => {
   return map[key] || key;
 };
 
+const generateCodeVerifier = () => {
+  const array = new Uint32Array(56 / 2);
+  window.crypto.getRandomValues(array);
+  return Array.from(array, (dec) => ("0" + dec.toString(16)).substr(-2)).join("");
+};
+
+const generateCodeChallenge = async (verifier: string) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await window.crypto.subtle.digest("SHA-256", data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+};
+
 const VirtualButton = ({
   label,
   actionKey,
@@ -282,17 +298,118 @@ export default function App() {
   }, [editingKey]);
 
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
+    const handleCallback = async () => {
+      if (
+        window.location.pathname === "/auth/callback" ||
+        window.location.pathname === "/auth/callback/"
+      ) {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+
+        if (code) {
+          if (window.opener) {
+            window.opener.postMessage({ type: "OAUTH_CODE", code }, "*");
+            window.close();
+            return;
+          }
+
+          const verifier = localStorage.getItem("pkce_verifier");
+          if (verifier) {
+            try {
+              const clientId = import.meta.env.VITE_DROPBOX_CLIENT_ID;
+              const redirectUri = `${window.location.origin}/auth/callback`;
+
+              const tokenResponse = await fetch(
+                "https://api.dropboxapi.com/oauth2/token",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                  },
+                  body: new URLSearchParams({
+                    client_id: clientId,
+                    grant_type: "authorization_code",
+                    code: code,
+                    redirect_uri: redirectUri,
+                    code_verifier: verifier,
+                  }),
+                },
+              );
+
+              const data = await tokenResponse.json();
+
+              if (data.access_token) {
+                localStorage.setItem("dropbox_token", data.access_token);
+                window.location.href = "/";
+              } else {
+                document.body.innerHTML = `Authentication failed: ${JSON.stringify(
+                  data,
+                )}`;
+              }
+            } catch (error) {
+              document.body.innerHTML = `Error: ${error}`;
+            }
+          } else {
+            document.body.innerHTML = `No verifier found.`;
+          }
+        } else {
+          document.body.innerHTML = `No code found.`;
+        }
+      }
+    };
+
+    handleCallback();
+  }, []);
+
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
       if (
         !event.origin.endsWith(".run.app") &&
         !event.origin.includes("localhost")
       ) {
         return;
       }
-      if (event.data?.type === "OAUTH_AUTH_SUCCESS") {
-        const token = event.data.token;
-        setDropboxToken(token);
-        localStorage.setItem("dropbox_token", token);
+      
+      if (event.data?.type === "OAUTH_CODE") {
+        const code = event.data.code;
+        const verifier = localStorage.getItem("pkce_verifier");
+
+        if (code && verifier) {
+          try {
+            const clientId = import.meta.env.VITE_DROPBOX_CLIENT_ID;
+            const redirectUri = `${window.location.origin}/auth/callback`;
+
+            const tokenResponse = await fetch(
+              "https://api.dropboxapi.com/oauth2/token",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: new URLSearchParams({
+                  client_id: clientId,
+                  grant_type: "authorization_code",
+                  code: code,
+                  redirect_uri: redirectUri,
+                  code_verifier: verifier,
+                }),
+              },
+            );
+
+            const data = await tokenResponse.json();
+
+            if (data.access_token) {
+              setDropboxToken(data.access_token);
+              localStorage.setItem("dropbox_token", data.access_token);
+            } else {
+              setError(`Authentication failed: ${JSON.stringify(data)}`);
+            }
+          } catch (error) {
+            setError(`Error exchanging token: ${error}`);
+          }
+        } else {
+          setError("No verifier found to exchange code.");
+        }
       }
     };
     window.addEventListener("message", handleMessage);
@@ -360,12 +477,22 @@ export default function App() {
 
   const handleConnectDropbox = async () => {
     try {
+      const verifier = generateCodeVerifier();
+      localStorage.setItem("pkce_verifier", verifier);
+      const challenge = await generateCodeChallenge(verifier);
+
+      const clientId = import.meta.env.VITE_DROPBOX_CLIENT_ID;
       const redirectUri = `${window.location.origin}/auth/callback`;
-      const response = await fetch(
-        `/api/auth/url?redirectUri=${encodeURIComponent(redirectUri)}`,
-      );
-      if (!response.ok) throw new Error("Failed to get auth URL");
-      const { url } = await response.json();
+
+      const params = new URLSearchParams({
+        client_id: clientId || "",
+        redirect_uri: redirectUri,
+        response_type: "code",
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      });
+
+      const url = `https://www.dropbox.com/oauth2/authorize?${params.toString()}`;
 
       const authWindow = window.open(
         url,

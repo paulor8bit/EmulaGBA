@@ -1,5 +1,7 @@
 # EmulaGBA
 
+🎮 **Jogue agora:** [https://emulagba.surge.sh/](https://emulagba.surge.sh/)
+
 Um emulador de Game Boy Advance (GBA) via web, construído com React, TypeScript e Tailwind CSS, que permite jogar suas ROMs diretamente do navegador e sincronizar seus "Save States" com o Dropbox.
 
 ## 🚀 Funcionalidades
@@ -27,9 +29,9 @@ Um emulador de Game Boy Advance (GBA) via web, construído com React, TypeScript
   - [Lucide React](https://lucide.dev/) (para ícones)
 - **Emulação**:
   - [Nostalgist.js](https://nostalgist.js.org/) (Wrapper para RetroArch no navegador, utilizando o core `mgba`).
-- **Backend / Autenticação**:
-  - [Express](https://expressjs.com/) (Node.js) para gerenciar o fluxo de autenticação OAuth 2.0 do Dropbox.
-  - [Dropbox API](https://www.dropbox.com/developers/documentation) para listar ROMs e gerenciar saves.
+- **Autenticação**:
+  - Fluxo **OAuth 2.0 PKCE** (Proof Key for Code Exchange) com a API do Dropbox.
+  - 100% Client-Side (não requer backend).
 
 ## 📦 Como Executar Localmente
 
@@ -49,8 +51,8 @@ Um emulador de Game Boy Advance (GBA) via web, construído com React, TypeScript
     - `files.metadata.read`
     - `files.content.read`
     - `files.content.write`
-7.  Na aba **Settings**, adicione a URL de redirecionamento OAuth (ex: `http://localhost:3000/api/auth/callback`) em **Redirect URIs**.
-8.  Anote o **App key** (Client ID) e o **App secret** (Client Secret).
+7.  Na aba **Settings**, adicione a URL de redirecionamento OAuth (ex: `http://localhost:3000/auth/callback`) em **Redirect URIs**.
+8.  Anote o **App key** (Client ID). O Client Secret não é necessário para este fluxo PKCE.
 
 ### Instalação
 
@@ -65,19 +67,35 @@ Um emulador de Game Boy Advance (GBA) via web, construído com React, TypeScript
     npm install
     ```
 
-3.  Crie um arquivo `.env` na raiz do projeto baseado no `.env.example` e preencha com suas credenciais do Dropbox:
+3.  Crie um arquivo `.env` na raiz do projeto baseado no `.env.example` e preencha com o seu Client ID do Dropbox:
     ```env
-    DROPBOX_CLIENT_ID=seu_app_key_aqui
-    DROPBOX_CLIENT_SECRET=seu_app_secret_aqui
+    VITE_DROPBOX_CLIENT_ID=seu_app_key_aqui
     APP_URL=http://localhost:3000
     ```
 
-4.  Inicie o servidor de desenvolvimento (que roda tanto o backend Express quanto o frontend Vite):
+4.  Inicie o servidor de desenvolvimento:
     ```bash
     npm run dev
     ```
 
 5.  Acesse `http://localhost:3000` no seu navegador.
+
+### Hospedagem (Deploy)
+
+Como o projeto é 100% Frontend (Static Site), você pode hospedá-lo facilmente em serviços como **Surge.sh**, **Vercel**, **Netlify** ou **GitHub Pages**.
+
+Para compilar o projeto para produção:
+```bash
+npm run build
+```
+Os arquivos compilados estarão na pasta `dist/`.
+
+**Exemplo com Surge.sh**:
+```bash
+npm install --global surge
+surge dist/ seu-dominio-emulagba.surge.sh
+```
+*(Lembre-se de adicionar a URL do seu domínio nas configurações do Dropbox em "Redirect URIs" como `https://seu-dominio-emulagba.surge.sh/auth/callback`)*
 
 ## 🎮 Como Usar
 
